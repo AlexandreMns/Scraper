@@ -29,7 +29,20 @@ async function scrapeLanguage(language, url) {
   const page = await browser.newPage();
 
   try {
-    await page.goto(url, { waitUntil: "load", timeout: 60000 });
+    async function gotoWithRetry(page, url, attempts = 3) {
+      for (let i = 1; i <= attempts; i++) {
+        try {
+          await page.goto(url, { waitUntil: "load", timeout: 90000 });
+          return;
+        } catch (err) {
+          console.error(
+            `  Attempt ${i}/${attempts} failed for ${url}: ${err.message}`,
+          );
+          if (i === attempts) throw err;
+          await new Promise((r) => setTimeout(r, 5000 * i));
+        }
+      }
+    }
     await page.waitForTimeout(3000);
 
     const accordionToggles = await page
@@ -104,6 +117,13 @@ async function scrapeAll() {
     } catch (err) {
       console.error(`  Error in ${language}:`, err.message);
     }
+  }
+
+  if (all.length === 0) {
+    console.error(
+      "ERROR: Scrape returned 0 items across all languages — refusing to overwrite catalog.json. This usually means snct.lu was unreachable.",
+    );
+    process.exit(1);
   }
 
   fs.writeFileSync("./data/catalog.json", JSON.stringify(all, null, 2));
